@@ -1,0 +1,3 @@
+*.wav
+alarm_audio/*.wav
+__pycache__/*

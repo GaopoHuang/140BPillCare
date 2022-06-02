@@ -65,7 +65,7 @@ def med_schedule_page(draw, pillId=0, time="1200", amount=3, set=True):
     else:
         text = "Unset" 
         draw.text((0, HEIGHT//4), text, font=font_m, fill=255)
-        text= "To set this pill, press "+str(pillIds) 
+        text= "To set this pill, press "+str(pillIds[pillId]) 
         draw.text((0, HEIGHT//4*3), text, font=font_s, fill=255)
 
 
@@ -81,6 +81,13 @@ def alarm_setup_page(draw, id=0, time="1200", amount=0):
         draw.text((0, HEIGHT//4*2), message_row2, font=font_s, fill=255)
         draw.text((0, HEIGHT//4*3), message_row3, font=font_s, fill=255)
 
+def recording_audio_page(draw, id=0):
+    pillIds = ["A", "B", "C", "D"]
+    draw.rectangle((0, 0, WIDTH, HEIGHT), outline=0, fill=0)
+    text = "Recording for Pill" + pillIds[id] 
+    draw.text((0, 0), text, font=font_l, fill=255)
+    text= "Press # to complete" 
+    draw.text((0, HEIGHT//4*3), text, font=font_s, fill=255)
 
 
 
