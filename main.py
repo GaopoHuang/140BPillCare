@@ -32,40 +32,45 @@ keys =  [   '1','2','3','A',    #key code
 rowsPins = [18,23,24,12]        #connect to the row pinouts of the keypad
 colsPins = [13,22,27,17]        #connect to the column pinouts of the keypad
 
-IDLE, MENU, SCHEDULE, SETTINGUP, ALARM, AUDIO_RECORD,  = 0,1,2,3,4,5
+IDLE, MENU, SCHEDULE, SETTINGUP, ALARM, AUDIO_RECORD = 0,1,2,3,4,5
 states = [IDLE, MENU, SCHEDULE, SETTINGUP, ALARM, AUDIO_RECORD]
 
 audio_path = './alarm_audio'
 saved_path = './medication_schedule.pkl'
 temp_id_file = os.path.join(audio_path, "temp_id.txt")
+wrongaudio_path = os.path.join(audio_path, 'wrong.wav')
+alarmaudio_path = os.path.join(audio_path, 'alarm.wav')
 idle_timer = time.time_ns() 
 IDLE_STATE_TIMER = 10e9
-
-time_4d = ['0','0','0','0']
-curr_digit = 0
-amount = 0
-curr_menu_pg, curr_sched_pg, curr_setup_pg = 0, 0, 0
-
-curr_audio, curr_id = [None, None], None
 
 
 ## TO-DO:
  # add menu: clear all history 
+ # add menu: clear all history 
 
 def check_id(pill_id):
+    curr_time = time.time_ns()
     while True:
-        if os.path.exists(temp_id_file):
-            with open(temp_id_file) as f:
-                temp_id = f.read()
+        if (time.time_ns()-curr_time>=1e9):
+            print("checking id")
+            curr_time = time.time_ns()
+            if os.path.exists(temp_id_file):
+                with open(temp_id_file) as f:
+                    temp_id = f.read()
                 if(temp_id == med_hist[pill_id][2]):
                     print("You found the right pill")
-                    #playsound(med_hist[pill_id][3])
+                    play_voice(med_hist[pill_id][3])
                     os.remove(temp_id_file)
-                    break 
+                    return True
                 else:
                     print("You got the wrong pill")
-                    #playsound(hard wrong file)
+                    play_voice(wrongaudio_path)
+                    os.remove(temp_id_file)
 
+def play_voice(voice_file):
+    pygame.mixer.music.load(voice_file)
+    pygame.mixer.music.play()
+                    
 def load_med_hist():
     if(os.path.exists(saved_path)):
         with open(saved_path,'rb') as f:
@@ -123,7 +128,13 @@ def read():
 font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 14)
 font2 = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
 
+time_4d = ['0','0','0','0']
+curr_digit = 0
+amount = 0
 
+curr_menu_pg, curr_sched_pg, curr_setup_pg = 0, 0, 0
+
+curr_audio, curr_id = [None, None], None
 
 def check_alarm(): 
     #TO-DO:
@@ -137,8 +148,10 @@ def check_alarm():
     for k, v in med_hist.items():
         time_str = ''.join(v[0])
         time_str = "%s:%s"%(time_str[:2], time_str[2:])
-        if time_str == now[:5] and int(now[6:7]) <= 10 : 
+        if time_str == now[:5] and int(now[6:8]) <= 10 : 
             print("PILL TIME FOR PILL %s"%k)
+            pygame.mixer.music.load(alarmaudio_path)
+            pygame.mixer.music.play()
             return k
     return None
 
@@ -279,13 +292,13 @@ def show_time(oled, image, draw, clr=False):
     # draw.text((0, 36), text, font=font2, fill=255)
     display(oled, image)
 
-# def show_setting(oled, image, draw):
-#     draw.rectangle((0, 0, oled.width, oled.height * 2), outline=0, fill=0)
-#     message_row1 = "Set alarm for"
-#     message_row2 = "%c%c : %c%c"%(time_4d[0],time_4d[1],time_4d[2],time_4d[3])
-#     draw.text((0,0), message_row1, font=font, fill=255)
-#     draw.text((0,14), message_row2, font=font2, fill=255)
-#     display(oled, image)
+def show_setting(oled, image, draw):
+    draw.rectangle((0, 0, oled.width, oled.height * 2), outline=0, fill=0)
+    message_row1 = "Set alarm for"
+    message_row2 = "%c%c : %c%c"%(time_4d[0],time_4d[1],time_4d[2],time_4d[3])
+    draw.text((0,0), message_row1, font=font, fill=255)
+    draw.text((0,14), message_row2, font=font2, fill=255)
+    display(oled, image)
 
 
 def loop(oled, image, draw, state, med_hist=None):
@@ -296,13 +309,18 @@ def loop(oled, image, draw, state, med_hist=None):
     while(True):
         if(time.time_ns()-last_display_time>= 1e9):
             last_display_time = time.time_ns()
-            if(state != ALARM):
+#             if((state != ALARM) and check_alarm()):
+#                 state = next_state(state, alarming = True)
+#                 continue
+            if(state!=ALARM):
                 pill_Id = check_alarm()
                 if pill_Id:
-                    state = next_state(state, alarming = True)
+                    print("alarm for pill id: ", pill_Id)
+                    state = next_state(state, alarming= True)
                     check_id(pill_Id)
-                continue
-            elif(state == IDLE):
+                    state = next_state(state, button = '#')
+                    continue
+            if(state == IDLE):
                 last_display_time = time.time_ns()
                 show_time(oled, image, draw)
 
