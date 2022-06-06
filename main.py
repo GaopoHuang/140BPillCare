@@ -18,6 +18,7 @@ import os, pickle, subprocess, signal
 import interface
 import pygame
 from mfrc522 import SimpleMFRC522
+from datetime import datetime
 
 
 import threading 
@@ -54,6 +55,7 @@ def load_med_hist():
 def save_med_hist(med_hist):
     with open(saved_path,'wb') as f:
         pickle.dump(med_hist, f)
+        print("Current med hist: ", med_hist)
 
 def write():
     reader = SimpleMFRC522()
@@ -75,19 +77,21 @@ def read():
             if (text is not None):
                 print(id)
                 print(text)
+                with open(os.path.join(audio_path,'temp_id.txt'), 'w') as f:
+                    f.write(str(id))
                 
             if id==665322504066: 
                 print("if 1")
-                pygame.mixer.music.load("stomach.wav")
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy() == True:
-                    continue
+                # pygame.mixer.music.load("stomach.wav")
+                # pygame.mixer.music.play()
+                # while pygame.mixer.music.get_busy() == True:
+                #     continue
             if id ==494783076233:
                 print("if 2")
-                pygame.mixer.music.load("head.wav")
-                pygame.mixer.music.play()
-                while pygame.mixer.music.get_busy() == True:
-                    continue
+                # pygame.mixer.music.load("head.wav")
+                # pygame.mixer.music.play()
+                # while pygame.mixer.music.get_busy() == True:
+                #     continue
         finally:
             print("out read")
             pass
@@ -103,25 +107,44 @@ amount = 0
 
 curr_menu_pg, curr_sched_pg, curr_setup_pg = 0, 0, 0
 
-curr_audio = [None, None]
+curr_audio, curr_id = [None, None], None
 
-def alarm(): 
+def check_alarm(): 
     #TO-DO:
     #1. show "pill time display" 
     #2. show current time 
     #3. show remaining pill time 
     # Press "#" or when pill is swiped to stop the process
-    pass
+    current_time = datetime.now()
+    now = current_time.strftime("%H:%M:%S")
+    print("Checking alarm, current time: ", now)
+    for k, v in med_hist.items():
+        time_str = ''.join(v[0])
+        time_str = "%s:%s"%(time_str[:2], time_str[2:])
+        if time_str == now[:5] and int(now[6:7]) <= 10 : 
+            print("PILL TIME FOR PILL %s"%k)
+            return True
+    return False
 
 def record_audio_start(page): 
     pillIds = ["A", "B", "C", "D"]
     file_name = os.path.join(audio_path, "pill_%s.wav"%(pillIds[page]))
     print("Start recording audio")
     p = subprocess.Popen(['arecord', '--format=S16_LE', '--rate=16000', '--file-type=wav', file_name])
-    return file_name, p 
+    return file_name, p
 
 def record_audio_terminate(file_name, p):
-    os.killpg(os.getpgid(p.pid), signal.SIGTERM)  # Send the signal to all the process groups
+    global curr_id
+    os.kill(p.pid, signal.SIGINT)  # Send the signal to all the process groups
+    print("Audio terminated")
+    temp_id_file = os.path.join(audio_path, "temp_id.txt")
+    with open(temp_id_file) as f:
+        temp_id = f.read()
+        print("Recorded id is: ", temp_id)
+        os.remove(temp_id_file)
+    curr_id = temp_id 
+    med_hist[curr_setup_pg].append(curr_id)
+    med_hist[curr_setup_pg].append(file_name)
     print("Audio completed")
 
 
@@ -132,8 +155,10 @@ def clr_alarm():
     amount = 0
     time_4d = ['0','0','0','0']
 
-def next_state(state, button="#", timeout=False, med_hist=None): 
+def next_state(state, button="#", timeout=False, med_hist=None, alarming = False): 
     global curr_menu_pg, curr_sched_pg, curr_setup_pg, time_4d, curr_digit, amount, curr_audio
+    if(alarming):
+        return ALARM
     if(timeout):
         return IDLE
     if(state==IDLE):
@@ -180,8 +205,7 @@ def next_state(state, button="#", timeout=False, med_hist=None):
             curr_digit=0 
             med_hist[curr_setup_pg] = [time_4d,amount]
             clr_alarm()
-            save_med_hist(med_hist = med_hist)
-            curr_audio[0], curr_audio[1] = record_audio_start(curr_setup_pg)
+            curr_audio[0],curr_audio[1] = record_audio_start(curr_setup_pg)
             return AUDIO_RECORD
         else: 
             if curr_digit>=0 and curr_digit<=3:
@@ -191,9 +215,14 @@ def next_state(state, button="#", timeout=False, med_hist=None):
                 amount = int(button)
                 curr_digit = 0 
             return SETTINGUP
+    elif(state == ALARM):
+        if(button=="#"):
+            return IDLE
     elif(state == AUDIO_RECORD):
         if(button=="#"):
+            print("Terminating audio")
             record_audio_terminate(*curr_audio)
+            save_med_hist(med_hist = med_hist)
             return MENU
             
     return state
@@ -250,10 +279,16 @@ def loop(oled, image, draw, state, med_hist=None):
     keypad = Keypad.Keypad(keys,rowsPins,colsPins,ROWS,COLS)    #creat Keypad object
     keypad.setDebounceTime(50)      #set the debounce time
     while(True):
-        if(state == IDLE and time.time_ns()-last_display_time>= 1e9):
+        if(time.time_ns()-last_display_time>= 1e9):
             last_display_time = time.time_ns()
-            show_time(oled, image, draw)
-        if(state != IDLE and time.time_ns()- idle_timer >= IDLE_STATE_TIMER):
+            if((state != ALARM) and check_alarm()):
+                state = next_state(state, alarming = True)
+                continue
+            elif(state == IDLE):
+                last_display_time = time.time_ns()
+                show_time(oled, image, draw)
+
+        if((state not in [IDLE, AUDIO_RECORD, ALARM]) and (time.time_ns()- idle_timer >= IDLE_STATE_TIMER)):
             state = next_state(state, timeout=True)
             idle_timer = time.time_ns()  
             print("Current state:", state)
@@ -275,6 +310,9 @@ def loop(oled, image, draw, state, med_hist=None):
             elif(state==SETTINGUP):
                 interface.alarm_setup_page(draw,curr_setup_pg,time_4d,amount)
                 display(oled,image)
+            elif(state==ALARM):
+                interface.alarm_page(draw)
+                display(oled, image) 
             elif(state== AUDIO_RECORD):
                 interface.recording_audio_page(draw, curr_setup_pg)
                 display(oled, image) 

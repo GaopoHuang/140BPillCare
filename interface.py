@@ -89,6 +89,11 @@ def recording_audio_page(draw, id=0):
     text= "Press # to complete" 
     draw.text((0, HEIGHT//4*3), text, font=font_s, fill=255)
 
+def alarm_page(draw,id=0):
+    draw.rectangle((0, 0, WIDTH, HEIGHT), outline=0, fill=0)
+    text = "IT'S PILL TIME"
+    draw.text((0,0), text, font=font_l, fill=255)
+
 
 
 

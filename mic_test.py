@@ -16,7 +16,7 @@ finally:
 
 while(True):
     if time_ns() - init_time >= 5e9:
-        os.killpg(os.getpgid(p.pid), signal.SIGTERM)  # Send the signal to all the process groups
+        os.kill(p.pid, signal.SIGINT)  # Send the signal to all the process groups
         print("audio completed")
         break 
 print("Actually ending now")
